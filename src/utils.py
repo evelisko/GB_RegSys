@@ -45,6 +45,7 @@ def prefilter_items(data, item_features, drop_categories=[],take_n_popular=5000)
     popularity.rename(columns={'quantity': 'n_sold'}, inplace=True)
 
     top = popularity.sort_values('n_sold', ascending=False).head(take_n_popular).item_id.tolist()	
+    
     # Заведем фиктивный item_id (если юзер покупал товары из топ-5000, то он "купил" такой товар)
     data.loc[~data['item_id'].isin(top), 'item_id'] = 999999
     
@@ -89,6 +90,7 @@ def get_own_recommendations(own, userid, user_item_matrix, N):
 def get_similar_users_recommendation(userid, userid_to_id, id_to_userid, user_item_matrix, model, N=5):
     """Рекомендуем топ-N товаров, среди купленных похожими юзерами"""
     res = []
+
     # Находим топ-N похожих пользователей
     similar_users = model.similar_users(userid_to_id[userid], N=N+1) # user + N его друзей.
     similar_users = [rec[0] for rec in similar_users]
