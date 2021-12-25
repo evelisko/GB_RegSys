@@ -157,11 +157,16 @@ class MainRecommender:
         self._update_dict(user_id=user)
         return self._get_recommendations(user, model=self.model, N=N)
 
-    def get_own_recommendations(self, user, N=5):
+    def get_own_recommendations(self, user, N=5, extend_with_top_popular=False):
         """Рекомендуем товары среди тех, которые юзер уже купил"""
 
         self._update_dict(user_id=user)
-        return self._get_recommendations(user, model=self.own_recommender, N=N)
+        recs = self._get_recommendations(user, model=self.own_recommender, N=N)
+        if extend_with_top_popular:
+                # res = [self.id_to_itemid[rec[0]] for rec in recs]
+                recs = self._extend_with_top_popular(recs, N=N)
+        assert len(recs) == N, 'Количество рекомендаций != {}'.format(N)
+        return recs
 
     def get_similar_items_recommendation(self, user, N=5):
         """Рекомендуем товары, похожие на топ-N купленных юзером товаров"""
@@ -176,7 +181,6 @@ class MainRecommender:
 
     def get_similar_users_recommendation(self, user, N=5):
         """Рекомендуем топ-N товаров, среди купленных похожими юзерами"""
-
         res = []
         
         # Находим топ-N похожих пользователей
@@ -184,7 +188,6 @@ class MainRecommender:
         similar_users = [rec[0] for rec in similar_users]
         similar_users = similar_users[1:]   # удалим юзера из запроса
 
-        #!!! Здесь была ошибка!
         for user in similar_users:
             userid = self.id_to_userid[user] #own recommender works with user_ids
             res.extend(self.get_own_recommendations(userid, N=1))
