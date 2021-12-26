@@ -34,13 +34,13 @@ class MainRecommender:
         
         # Топ покупок каждого юзера
         self.top_purchases = data.groupby(['user_id', 'item_id'])['quantity'].count().reset_index()
-        self.top_purchases.sort_values('quantity', ascending=False, inplace=True)
-        self.top_purchases = self.top_purchases[self.top_purchases['item_id'] != 999999]
+        self.top_purchases.sort_values('quantity', ascending=False, inplace=True) # Это к-во покупок.
+        self.top_purchases = self.top_purchases[self.top_purchases['item_id'] != 999999] # исключим из ТОП-а покупок item_id = 999999
 
         # Топ покупок по всему датасету
         self.overall_top_purchases = data.groupby('item_id')['quantity'].count().reset_index()
         self.overall_top_purchases.sort_values('quantity', ascending=False, inplace=True)
-        self.overall_top_purchases = self.overall_top_purchases[self.overall_top_purchases['item_id'] != 999999]
+        self.overall_top_purchases = self.overall_top_purchases[self.overall_top_purchases['item_id'] != 999999] # исключим из ТОП-а покупок item_id = 999999
         self.overall_top_purchases = self.overall_top_purchases.item_id.tolist()
 
         self.user_item_matrix = self._prepare_matrix(data)  # pd.DataFrame
@@ -48,18 +48,19 @@ class MainRecommender:
             self.itemid_to_id, self.userid_to_id = self._prepare_dicts(self.user_item_matrix)
 
         if weighting:
-            self.user_item_matrix = bm25_weight(self.user_item_matrix.T).T
+            self.user_item_matrix = bm25_weight(self.user_item_matrix.T).T # настроить параметры взвешивния. 
 
-        self.model = self.fit(self.user_item_matrix)
-        self.own_recommender = self.fit_own_recommender(self.user_item_matrix)
+        self.als_model = self.fit(self.user_item_matrix)
+        self.own_recommender_model = self.fit_own_recommender(self.user_item_matrix)
 
     @staticmethod
     def _prepare_matrix(data):
         """Готовит user-item матрицу"""
         user_item_matrix = pd.pivot_table(data,
-                                          index='user_id', columns='item_id',
+                                          index='user_id', 
+                                          columns='item_id',
                                           values='quantity',  # Можно пробовать другие варианты
-                                          aggfunc='count',
+                                          aggfunc='mean',
                                           fill_value=0
                                           )
 
@@ -95,13 +96,15 @@ class MainRecommender:
         return own_recommender
 
     @staticmethod
-    def fit(user_item_matrix, n_factors=20, regularization=0.001, iterations=15, num_threads=4):
+    def fit(user_item_matrix, n_factors=30, regularization=0.001, iterations=15, num_threads=4):
         """Обучает ALS"""
 
         model = AlternatingLeastSquares(factors=n_factors,
                                         regularization=regularization,
                                         iterations=iterations,
-                                        num_threads=num_threads, random_state=0)
+                                        num_threads=num_threads, 
+                                        random_state=0)
+
         model.fit(csr_matrix(user_item_matrix).T.tocsr())
 
         return model
@@ -119,9 +122,18 @@ class MainRecommender:
 
     def _get_similar_item(self, item_id):
         """Находит товар, похожий на item_id"""
-        recs = self.model.similar_items(self.itemid_to_id[item_id], N=2)  # Товар похож на себя -> рекомендуем 2 товара
+        recs = self.als_model.similar_items(self.itemid_to_id[item_id], N=2)  # Товар похож на себя -> рекомендуем 2 товара
         top_rec = recs[1][0]  # И берем второй (не товар из аргумента метода)
         return self.id_to_itemid[top_rec]
+
+    def _extend_with_als(self, user, recommendations, N=5):
+        """Если кол-во рекоммендаций < N, то дополняем их топ-популярными"""
+
+        if len(recommendations) < N:
+            recommendations.extend(self.get_als_recommendations(user, N))
+            recommendations = recommendations[:N]
+
+        return recommendations
 
     def _extend_with_top_popular(self, recommendations, N=5):
         """Если кол-во рекоммендаций < N, то дополняем их топ-популярными"""
@@ -146,26 +158,26 @@ class MainRecommender:
         
         res = [self.id_to_itemid[rec[0]] for rec in recs]
 
-        res = self._extend_with_top_popular(res, N=N)
+        # res = self._extend_with_top_popular(res, N=N)
 
-        assert len(res) == N, 'Количество рекомендаций != {}'.format(N)
+        #assert len(res) == N, 'Количество рекомендаций != {}'.format(N)
         return res
 
     def get_als_recommendations(self, user, N=5):
         """Рекомендации через стардартные библиотеки implicit"""
 
         self._update_dict(user_id=user)
-        return self._get_recommendations(user, model=self.model, N=N)
+        return self._get_recommendations(user, model=self.als_model, N=N)
 
     def get_own_recommendations(self, user, N=5, extend_with_top_popular=False):
         """Рекомендуем товары среди тех, которые юзер уже купил"""
 
         self._update_dict(user_id=user)
-        recs = self._get_recommendations(user, model=self.own_recommender, N=N)
+        recs = self._get_recommendations(user, model=self.own_recommender_model, N=N)
         if extend_with_top_popular:
                 # res = [self.id_to_itemid[rec[0]] for rec in recs]
                 recs = self._extend_with_top_popular(recs, N=N)
-        assert len(recs) == N, 'Количество рекомендаций != {}'.format(N)
+        # assert len(recs) == N, 'Количество рекомендаций != {}'.format(N)
         return recs
 
     def get_similar_items_recommendation(self, user, N=5):
@@ -176,7 +188,7 @@ class MainRecommender:
         res = top_users_purchases['item_id'].apply(lambda x: self._get_similar_item(x)).tolist()
         res = self._extend_with_top_popular(res, N=N)
 
-        assert len(res) == N, 'Количество рекомендаций != {}'.format(N)
+        # assert len(res) == N, 'Количество рекомендаций != {}'.format(N)
         return res
 
     def get_similar_users_recommendation(self, user, N=5):
@@ -184,7 +196,7 @@ class MainRecommender:
         res = []
         
         # Находим топ-N похожих пользователей
-        similar_users = self.model.similar_users(self.userid_to_id[user], N=N+1)
+        similar_users = self.als_model.similar_users(self.userid_to_id[user], N=N+1)
         similar_users = [rec[0] for rec in similar_users]
         similar_users = similar_users[1:]   # удалим юзера из запроса
 
@@ -194,5 +206,7 @@ class MainRecommender:
 
         res = self._extend_with_top_popular(res, N=N)
 
-        assert len(res) == N, 'Количество рекомендаций != {}'.format(N)
+        # assert len(res) == N, 'Количество рекомендаций != {}'.format(N)
         return res
+
+    
