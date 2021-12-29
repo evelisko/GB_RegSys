@@ -135,6 +135,12 @@ class MainRecommender:
 
         return recommendations
 
+    def get_top_popular(self, N=5):
+        """Если кол-во рекоммендаций < N, то дополняем их топ-популярными"""
+        recommendations = self.overall_top_purchases[:N]
+
+        return recommendations
+
     def _extend_with_top_popular(self, recommendations, N=5):
         """Если кол-во рекоммендаций < N, то дополняем их топ-популярными"""
 
