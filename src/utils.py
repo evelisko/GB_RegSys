@@ -232,10 +232,10 @@ def perpare_lvl2_1(val_data, train_data, recommender, item_features, user_featur
 
     targets_lvl_2 = pd.concat([targets_warm, targets_cold], ignore_index=True)
 
-    X_ = targets_lvl_2.drop('target', axis=1)
-    y_ = targets_lvl_2[['target']]
+    # X_ = targets_lvl_2.drop('target', axis=1)
+    # y_ = targets_lvl_2[['target']]
 
-    return X_, y_,
+    return  targets_lvl_2 #X_, y_,
 
 #------------------------------------------------------------------------------------------------
 
